@@ -1,0 +1,29 @@
+# General
+.DS_Store
+Thumbs.db
+.idea/
+*.iml
+.vscode/
+.env
+
+# Gradle / Android
+.gradle/
+build/
+local.properties
+captures/
+*.apk
+*.aab
+.kotlin/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# Datos generados (se regeneran con data-platform)
+data-platform/salida/*
+!data-platform/salida/.gitkeep
+infrastructure/otp/datos/*.pbf
+infrastructure/otp/datos/*.zip
+infrastructure/otp/datos/graph.obj

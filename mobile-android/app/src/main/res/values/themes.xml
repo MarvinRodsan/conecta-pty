@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tema de la ventana; los colores reales los pone Compose (ui/tema) -->
+    <style name="Theme.ConectaPTY" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/fondo</item>
+    </style>
+    <color name="fondo">#FFF7F9FB</color>
+    <color name="marca">#FF0B5C7A</color>
+</resources>

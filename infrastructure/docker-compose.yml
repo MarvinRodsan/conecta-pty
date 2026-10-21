@@ -1,0 +1,60 @@
+# Entorno local de Conecta PTY
+#   docker compose up -d db            -> solo la base de datos
+#   docker compose up -d db otp        -> base de datos + motor de rutas
+#   docker compose --profile completo up -d   -> todo, incluido el backend en contenedor
+name: conecta-pty
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: conecta
+      POSTGRES_USER: conecta
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-conecta_local}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U conecta -d conecta"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  otp:
+    # OpenTripPlanner 2: construye el grafo (OSM + GTFS) en memoria al arrancar.
+    # Necesita en ./otp/datos:  panama-latest.osm.pbf  y  metro-pty-gtfs.zip
+    image: opentripplanner/opentripplanner:2.7.0
+    command: ["--build", "--serve"]
+    environment:
+      JAVA_TOOL_OPTIONS: "-Xmx2g"
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./otp/datos:/var/opentripplanner
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/otp/ > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 40
+      start_period: 60s
+
+  backend:
+    profiles: ["completo"]
+    build: ../backend
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/conecta
+      DB_USER: conecta
+      DB_PASSWORD: ${DB_PASSWORD:-conecta_local}
+      OTP_URL: http://otp:8080
+      GTFS_PATH: /datos/metro-pty-gtfs.zip
+    volumes:
+      - ./otp/datos:/datos:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

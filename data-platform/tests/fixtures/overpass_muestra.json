@@ -1,0 +1,38 @@
+{
+  "_nota": "DATOS SINTÉTICOS SOLO PARA PRUEBAS. Coordenadas aproximadas, no usar en producción.",
+  "elements": [
+    {"type": "relation", "id": 101, "tags": {"route": "subway", "ref": "1", "name": "Línea 1: Estación A → San Miguelito", "colour": "#e30613"},
+     "members": [
+       {"type": "node", "ref": 1, "role": "stop"},
+       {"type": "node", "ref": 11, "role": "platform"},
+       {"type": "node", "ref": 2, "role": "stop"},
+       {"type": "node", "ref": 3, "role": "stop"},
+       {"type": "way", "ref": 900, "role": ""}
+     ]},
+    {"type": "relation", "id": 102, "tags": {"route": "subway", "ref": "1", "name": "Línea 1: San Miguelito → Estación A", "colour": "e30613"},
+     "members": [
+       {"type": "node", "ref": 4, "role": "stop"},
+       {"type": "node", "ref": 5, "role": "stop"},
+       {"type": "node", "ref": 6, "role": "stop"}
+     ]},
+    {"type": "relation", "id": 201, "tags": {"route": "subway", "ref": "2", "name": "Línea 2: San Miguelito → Estación C"},
+     "members": [
+       {"type": "node", "ref": 7, "role": "stop_entry_only"},
+       {"type": "node", "ref": 8, "role": "stop"},
+       {"type": "node", "ref": 9, "role": "stop_exit_only"},
+       {"type": "node", "ref": 999, "role": "stop"}
+     ]},
+    {"type": "relation", "id": 301, "tags": {"route": "subway", "ref": "X", "name": "Relación rota"},
+     "members": [{"type": "node", "ref": 1, "role": "stop"}]},
+    {"type": "node", "id": 1, "lat": 8.9900, "lon": -79.5300, "tags": {"name": "Estación A", "public_transport": "stop_position"}},
+    {"type": "node", "id": 11, "lat": 8.9901, "lon": -79.5301, "tags": {"name": "Estación A", "public_transport": "platform"}},
+    {"type": "node", "id": 2, "lat": 9.0100, "lon": -79.5100, "tags": {"name": "Estación B"}},
+    {"type": "node", "id": 3, "lat": 9.0300, "lon": -79.4900, "tags": {"name": "San Miguelito"}},
+    {"type": "node", "id": 4, "lat": 9.0301, "lon": -79.4901, "tags": {"name": "San Miguelito"}},
+    {"type": "node", "id": 5, "lat": 9.0101, "lon": -79.5101, "tags": {"name": "Estación B"}},
+    {"type": "node", "id": 6, "lat": 8.9901, "lon": -79.5299, "tags": {"name": "Estación A"}},
+    {"type": "node", "id": 7, "lat": 9.0305, "lon": -79.4895, "tags": {"name": "Estación San Miguelito L2"}},
+    {"type": "node", "id": 8, "lat": 9.0400, "lon": -79.4700, "tags": {"name": "Cincuentenario"}},
+    {"type": "node", "id": 9, "lat": 9.0500, "lon": -79.4500, "tags": {"name": "Estación C"}}
+  ]
+}

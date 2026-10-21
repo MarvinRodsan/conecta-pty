@@ -1,0 +1,24 @@
+{
+  "_comentario": "Supuestos usados para generar el GTFS del piloto. Todo lo marcado 'estimado' debe reemplazarse por datos oficiales cuando existan.",
+  "agencia": {
+    "agency_id": "METRO_PTY",
+    "agency_name": "Metro de Panamá",
+    "agency_url": "https://www.elmetrodepanama.com",
+    "agency_timezone": "America/Panama",
+    "agency_lang": "es"
+  },
+  "zona_busqueda_bbox": [8.90, -79.62, 9.20, -79.20],
+  "servicios": {
+    "LV":  { "dias": ["monday", "tuesday", "wednesday", "thursday", "friday"], "inicio": "05:00:00", "fin": "23:00:00" },
+    "SAB": { "dias": ["saturday"], "inicio": "05:00:00", "fin": "22:00:00" },
+    "DOM": { "dias": ["sunday"], "inicio": "07:00:00", "fin": "22:00:00" }
+  },
+  "fuente_horarios": "Horario general de operación publicado en Wikipedia (Panama Metro), consultado 2026-10-21. Pendiente confirmar con Metro de Panamá.",
+  "intervalo_min_por_servicio": { "LV": 5, "SAB": 7, "DOM": 10 },
+  "estado_intervalo": "estimado",
+  "velocidad_comercial_kmh": 35,
+  "permanencia_en_estacion_s": 30,
+  "estado_tiempos_viaje": "estimado",
+  "tiempo_minimo_transbordo_s": 180,
+  "vigencia_dias": 365
+}

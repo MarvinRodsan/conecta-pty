@@ -1,0 +1,48 @@
+spring:
+  application:
+    name: conecta-pty
+  threads:
+    virtual:
+      enabled: true          # Java 21: miles de peticiones concurrentes con pocos recursos
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/conecta}
+    username: ${DB_USER:conecta}
+    password: ${DB_PASSWORD:conecta_local}
+    hikari:
+      maximum-pool-size: 10
+  flyway:
+    locations: classpath:db/migration
+  cache:
+    cache-names: planes
+    caffeine:
+      spec: maximumSize=2000,expireAfterWrite=60s
+
+server:
+  port: 8080
+  compression:
+    enabled: true            # respuestas JSON comprimidas: menos datos móviles
+    mime-types: application/json
+    min-response-size: 1024
+  error:
+    include-message: always
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+springdoc:
+  swagger-ui:
+    path: /docs
+
+conecta:
+  otp:
+    url: ${OTP_URL:http://localhost:8081}
+    timeout-ms: 8000
+  gtfs:
+    # Ruta al zip generado por data-platform. Si existe, sus estaciones se cargan al arrancar.
+    path: ${GTFS_PATH:../infrastructure/otp/datos/metro-pty-gtfs.zip}
