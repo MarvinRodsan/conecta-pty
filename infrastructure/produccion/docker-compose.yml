@@ -74,7 +74,7 @@ services:
         condition: service_started
 
   caddy:
-    image: caddy:2.10-alpine
+    image: caddy:2.11-alpine
     restart: unless-stopped
     environment:
       DOMINIO: ${DOMINIO:?falta DOMINIO en .env}
