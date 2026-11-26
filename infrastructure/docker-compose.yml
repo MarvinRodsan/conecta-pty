@@ -31,7 +31,7 @@ services:
   #      docker compose up -d db otp
   otp-construir:
     profiles: ["construir"]
-    image: opentripplanner/opentripplanner:2.7.0
+    image: opentripplanner/opentripplanner:2.10.0
     command: ["--build", "--save"]
     environment:
       JAVA_TOOL_OPTIONS: "-Xmx2g"
@@ -40,7 +40,7 @@ services:
       - ./otp/datos:/var/opentripplanner
 
   otp:
-    image: opentripplanner/opentripplanner:2.7.0
+    image: opentripplanner/opentripplanner:2.10.0
     command: ["--load", "--serve"]
     environment:
       JAVA_TOOL_OPTIONS: "-Xmx1200m"
