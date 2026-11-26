@@ -1,0 +1,7 @@
+# Límite de memoria para Docker (WSL 2) en una PC de 8 GB.
+# Copia este archivo a:  C:\Users\<tu usuario>\.wslconfig   (sin extensión .txt)
+# y luego en PowerShell:  wsl --shutdown   (Docker Desktop se reinicia solo)
+[wsl2]
+memory=4GB
+swap=4GB
+processors=4

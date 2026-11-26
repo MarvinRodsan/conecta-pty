@@ -30,7 +30,7 @@ Una app de transporte se usa con poca batería, datos móviles limitados y seña
 | Caché Caffeine de 60 s por coordenadas redondeadas (~11 m) | `ServicioPlanificacion` | Búsquedas casi iguales no repiten el cálculo en OTP |
 | Compresión gzip de JSON (> 1 KB) | `application.yml` | El JSON repetitivo se comprime mucho: menos datos móviles |
 | Respuesta "traducida" y mínima | `TraductorItinerario` | La app recibe frases listas, no el JSON completo de OTP |
-| Timeouts explícitos (3 s conexión, 8 s lectura) | `ClienteOtp` | Un OTP lento no tumba la API |
+| Timeouts explícitos (3 s conexión, 20 s lectura) y HTTP/1.1 | `ClienteOtp` | Un OTP lento no tumba la API |
 | Imagen Docker JRE + SerialGC | `backend/Dockerfile` | Menos RAM en servidores pequeños |
 
 ## Datos
@@ -38,3 +38,19 @@ Una app de transporte se usa con poca batería, datos móviles limitados y seña
 - Importación **idempotente** por SHA-256: reiniciar el backend no reimporta.
 - **Transaccional**: o se publica el catálogo completo o no cambia nada.
 - Validación antes de publicar (`python -m conecta_data validar`): coordenadas en Panamá, referencias, tiempos crecientes, estaciones duplicadas a menos de 30 m.
+
+## Seguridad (capas activas)
+
+| Capa | Dónde | Qué evita |
+|---|---|---|
+| Puertos de BD y OTP solo en `127.0.0.1` | `docker-compose.yml` | Que alguien en tu misma red Wi-Fi entre a la BD |
+| Límite por IP: 120/min general, 30/min en `/plan` (429 + `Retry-After`) | `FiltroSeguridad`, `LimitadorTasa` | Saturar la API o el motor de rutas |
+| Cabeceras: `nosniff`, `X-Frame-Options: DENY`, CSP `default-src 'none'` en `/api` | `FiltroSeguridad` | Ataques desde el navegador (clickjacking, sniffing) |
+| Errores sin detalles internos | `ManejadorErrores`, `application.yml` | Revelar clases, versiones o rutas del servidor |
+| `/actuator/health` sin detalles | `application.yml` | Revelar la base de datos |
+| Validación de coordenadas y hora (Panamá, ±60 días) | controladores | Consultas absurdas y llenar la caché |
+| SQL siempre parametrizado | `ParadaRepositorio` | Inyección SQL |
+| Perfil `prod`: sin `/docs`, contraseñas obligatorias por variable de entorno | `application-prod.yml` | Mapa público de la API, contraseñas por defecto |
+| Contraseña de BD en `.env` (fuera de Git) | `infrastructure/.env.example` | Credenciales filtradas en GitHub |
+
+Pendiente antes de publicar: HTTPS con Caddy, firewall (solo 443), usuario de BD con permisos mínimos, Dependabot + Trivy en CI.

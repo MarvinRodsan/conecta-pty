@@ -1,6 +1,7 @@
 # Entorno local de Conecta PTY
-#   docker compose up -d db            -> solo la base de datos
-#   docker compose up -d db otp        -> base de datos + motor de rutas
+#   docker compose run --rm otp-construir     -> arma el grafo de rutas (primera vez)
+#   docker compose up -d db otp               -> base de datos + motor de rutas
+#   docker compose down                       -> apaga todo y libera la RAM
 #   docker compose --profile completo up -d   -> todo, incluido el backend en contenedor
 name: conecta-pty
 
@@ -12,7 +13,8 @@ services:
       POSTGRES_USER: conecta
       POSTGRES_PASSWORD: ${DB_PASSWORD:-conecta_local}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"   # solo tu PC, no la red Wi-Fi
+    mem_limit: 512m          # de sobra para el piloto
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -21,23 +23,32 @@ services:
       timeout: 3s
       retries: 20
 
-  otp:
-    # OpenTripPlanner 2: construye el grafo (OSM + GTFS) en memoria al arrancar.
-    # Necesita en ./otp/datos:  panama-latest.osm.pbf  y  metro-pty-gtfs.zip
+  # ── OpenTripPlanner en dos pasos, pensado para PCs de 8 GB ──────────────
+  # 1) Construir el grafo UNA vez (y cada vez que cambie el GTFS o el mapa):
+  #      docker compose run --rm otp-construir
+  #    Lee ./otp/datos/panama-latest.osm.pbf + metro-pty-gtfs.zip y guarda graph.obj
+  # 2) Servir cargando el grafo ya hecho (mucho menos memoria y arranque rápido):
+  #      docker compose up -d db otp
+  otp-construir:
+    profiles: ["construir"]
     image: opentripplanner/opentripplanner:2.7.0
-    command: ["--build", "--serve"]
+    command: ["--build", "--save"]
     environment:
       JAVA_TOOL_OPTIONS: "-Xmx2g"
-    ports:
-      - "8081:8080"
+    mem_limit: 2600m
     volumes:
       - ./otp/datos:/var/opentripplanner
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/otp/ > /dev/null || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 40
-      start_period: 60s
+
+  otp:
+    image: opentripplanner/opentripplanner:2.7.0
+    command: ["--load", "--serve"]
+    environment:
+      JAVA_TOOL_OPTIONS: "-Xmx1200m"
+    mem_limit: 1700m
+    ports:
+      - "127.0.0.1:8081:8080"   # solo tu PC; la app habla con el backend, no con OTP
+    volumes:
+      - ./otp/datos:/var/opentripplanner
 
   backend:
     profiles: ["completo"]
@@ -51,7 +62,7 @@ services:
     volumes:
       - ./otp/datos:/datos:ro
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       db:
         condition: service_healthy

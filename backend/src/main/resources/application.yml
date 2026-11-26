@@ -4,6 +4,11 @@ spring:
   threads:
     virtual:
       enabled: true          # Java 21: miles de peticiones concurrentes con pocos recursos
+  jackson:
+    deserialization:
+      # Jackson 3 falla si un número viene vacío. Como en Jackson 2: usar 0 y seguir
+      # (un campo que OTP deje de enviar no debe tumbar todas las búsquedas de ruta).
+      fail-on-null-for-primitives: false
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/conecta}
     username: ${DB_USER:conecta}
@@ -12,10 +17,7 @@ spring:
       maximum-pool-size: 10
   flyway:
     locations: classpath:db/migration
-  cache:
-    cache-names: planes
-    caffeine:
-      spec: maximumSize=2000,expireAfterWrite=60s
+  # Cachés en memoria (Caffeine): duración y tamaño de cada una en comun/ConfiguracionCache.java
 
 server:
   port: 8080
@@ -24,7 +26,8 @@ server:
     mime-types: application/json
     min-response-size: 1024
   error:
-    include-message: always
+    include-message: never     # no filtrar detalles internos en errores no controlados
+    include-stacktrace: never
 
 management:
   endpoints:
@@ -33,7 +36,7 @@ management:
         include: health,info
   endpoint:
     health:
-      show-details: always
+      show-details: never      # /actuator/health solo dice UP/DOWN, sin datos de la BD
 
 springdoc:
   swagger-ui:
@@ -42,7 +45,22 @@ springdoc:
 conecta:
   otp:
     url: ${OTP_URL:http://localhost:8081}
-    timeout-ms: 8000
+    timeout-ms: 20000          # la primera ruta tras arrancar OTP puede tardar
+    calentar: true             # búsqueda de prueba al arrancar (ver CalentadorOtp)
+  limites:
+    general: 120               # peticiones por IP y minuto en toda la API
+    plan: 30                   # /plan usa el motor de rutas: más estricto
+    lugares: 20                # /lugares consulta un servicio externo: aún más estricto
+    reportes: 5                # /reportes escribe en la BD: el más estricto
+  geocodificador:
+    # Photon (komoot) busca direcciones y lugares en OpenStreetMap, sin API key.
+    # Uso justo: con caché de 24 h y límite por IP. Para mucho tráfico, instalar Photon propio.
+    url: ${GEOCODER_URL:https://photon.komoot.io}
+    habilitado: ${GEOCODER_HABILITADO:true}
+    timeout-ms: 5000
+  aviso-sin-metro: >-
+    No encontramos trenes del Metro para esa hora. Horario de referencia (por confirmar):
+    L-V 5:00–23:00, sábado 5:00–22:00, domingo y feriados 7:00–22:00.
   gtfs:
     # Ruta al zip generado por data-platform. Si existe, sus estaciones se cargan al arrancar.
     path: ${GTFS_PATH:../infrastructure/otp/datos/metro-pty-gtfs.zip}

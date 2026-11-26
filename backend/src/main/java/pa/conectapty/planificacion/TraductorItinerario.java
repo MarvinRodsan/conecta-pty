@@ -1,5 +1,8 @@
 package pa.conectapty.planificacion;
 
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import pa.conectapty.planificacion.Itinerario.Opcion;
@@ -10,6 +13,9 @@ import pa.conectapty.planificacion.OtpRespuesta.Leg;
 /** Convierte la respuesta técnica de OTP en instrucciones en lenguaje sencillo (sección 9.2). */
 public final class TraductorItinerario {
 
+    static final ZoneId PANAMA = ZoneId.of("America/Panama");
+    private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
+
     private TraductorItinerario() {}
 
     public static List<Opcion> traducir(OtpRespuesta r) {
@@ -18,6 +24,7 @@ public final class TraductorItinerario {
         }
         List<Opcion> opciones = new ArrayList<>();
         for (ItinerarioOtp it : r.data().plan().itineraries()) {
+            if (it.legs() == null || it.legs().isEmpty()) continue;
             List<Tramo> tramos = new ArrayList<>();
             int enTransporte = 0;
             for (Leg leg : it.legs()) {
@@ -27,12 +34,19 @@ public final class TraductorItinerario {
                 if (caminar && leg.distance() < 20) continue;
                 tramos.add(tramo(leg, caminar));
             }
+            Leg primero = it.legs().get(0);
+            Leg ultimo = it.legs().get(it.legs().size() - 1);
             opciones.add(new Opcion(
                     minutos(it.duration()),
                     Math.max(0, enTransporte - 1),
                     (int) Math.round(it.walkDistance()),
+                    hora(primero.startTime()),
+                    hora(ultimo.endTime()),
+                    enTransporte > 0,
                     List.copyOf(tramos)));
         }
+        // Primero las que usan Metro: caminar 6 km no debería ser la opción destacada
+        opciones.sort((a, b) -> Boolean.compare(b.usaMetro(), a.usaMetro()));
         return opciones;
     }
 
@@ -41,10 +55,12 @@ public final class TraductorItinerario {
         String hasta = nombre(leg.to());
         int distancia = (int) Math.round(leg.distance());
         int duracion = minutos(leg.duration());
+        String sale = hora(leg.startTime());
+        String llega = hora(leg.endTime());
         String geometria = leg.legGeometry() == null ? null : leg.legGeometry().points();
         if (caminar) {
             String destino = "Destino".equalsIgnoreCase(hasta) ? "tu destino" : hasta;
-            return new Tramo("CAMINAR", desde, hasta, null, null, null, 0, duracion, distancia,
+            return new Tramo("CAMINAR", desde, hasta, null, null, null, 0, duracion, distancia, sale, llega,
                     "Camina " + metrosLegibles(distancia) + " hasta " + destino + ".", geometria);
         }
         String linea = leg.route() == null ? "?" : leg.route().shortName();
@@ -54,8 +70,14 @@ public final class TraductorItinerario {
         String instruccion = "En " + desde + ", toma la Línea " + linea
                 + (direccion != null && !direccion.isBlank() ? " hacia " + direccion : "")
                 + " y bájate en " + hasta + " (" + paradas + (paradas == 1 ? " parada" : " paradas") + ").";
-        return new Tramo("METRO", desde, hasta, linea, color, direccion, paradas, duracion, distancia,
+        return new Tramo("METRO", desde, hasta, linea, color, direccion, paradas, duracion, distancia, sale, llega,
                 instruccion, geometria);
+    }
+
+    /** Epoch en ms -> "08:05" en hora de Panamá. 0 (no vino) -> null. */
+    static String hora(long epochMs) {
+        if (epochMs <= 0) return null;
+        return HH_MM.format(Instant.ofEpochMilli(epochMs).atZone(PANAMA));
     }
 
     private static String nombre(OtpRespuesta.Lugar l) {

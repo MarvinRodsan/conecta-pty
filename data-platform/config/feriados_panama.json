@@ -1,0 +1,25 @@
+{
+  "_comentario": "Feriados que cambian el horario del Metro. Se convierten en calendar_dates.txt: ese día no corre el servicio normal (L-V o sábado) y corre el de domingo/feriados. Estado 'por_confirmar' hasta que el Metro publique su calendario oficial.",
+  "estado": "por_confirmar",
+  "fuente": "Código de Trabajo de Panamá, art. 46 (días de fiesta o duelo nacional). Horario de feriados del Metro según Wikipedia (Panama Metro): domingo y feriados 07:00–22:00. Consultado 2026-10-28.",
+  "servicio_en_feriado": "DOM",
+  "_trasladar": "Si se confirma que un feriado en domingo se disfruta el lunes siguiente, poner true.",
+  "trasladar_domingo_a_lunes": false,
+  "fijos": [
+    { "dia": "01-01", "nombre": "Año Nuevo" },
+    { "dia": "01-09", "nombre": "Día de los Mártires" },
+    { "dia": "05-01", "nombre": "Día del Trabajo" },
+    { "dia": "11-03", "nombre": "Separación de Panamá de Colombia" },
+    { "dia": "11-05", "nombre": "Día de Colón" },
+    { "dia": "11-10", "nombre": "Primer Grito de Independencia" },
+    { "dia": "11-28", "nombre": "Independencia de Panamá de España" },
+    { "dia": "12-08", "nombre": "Día de las Madres" },
+    { "dia": "12-25", "nombre": "Navidad" }
+  ],
+  "moviles": [
+    { "regla": "martes_carnaval", "nombre": "Martes de Carnaval" },
+    { "regla": "viernes_santo", "nombre": "Viernes Santo" }
+  ],
+  "_adicionales": "Días declarados por decreto (duelo nacional, elecciones, etc.). Formato: { \"fecha\": \"2026-12-20\", \"nombre\": \"...\", \"fuente\": \"Decreto ...\" }",
+  "adicionales": []
+}

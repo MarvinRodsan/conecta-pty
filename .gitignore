@@ -5,10 +5,12 @@ Thumbs.db
 *.iml
 .vscode/
 .env
+!.env.example
 
 # Gradle / Android
 .gradle/
 build/
+out/
 local.properties
 captures/
 *.apk
@@ -27,3 +29,4 @@ data-platform/salida/*
 infrastructure/otp/datos/*.pbf
 infrastructure/otp/datos/*.zip
 infrastructure/otp/datos/graph.obj
+infrastructure/otp/datos/*.bak

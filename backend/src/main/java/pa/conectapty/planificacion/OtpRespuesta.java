@@ -17,8 +17,10 @@ public record OtpRespuesta(Data data, List<ErrorGql> errors) {
     public record ItinerarioOtp(long duration, double walkDistance, List<Leg> legs) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
+    /** startTime/endTime en milisegundos desde 1970 (UTC). */
     public record Leg(String mode, double duration, double distance, Lugar from, Lugar to,
-                      Ruta route, String headsign, Geometria legGeometry, List<Lugar> intermediateStops) {}
+                      Ruta route, String headsign, Geometria legGeometry, List<Lugar> intermediateStops,
+                      long startTime, long endTime) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Lugar(String name) {}

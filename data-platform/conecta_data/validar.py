@@ -5,6 +5,7 @@ import csv
 import io
 import zipfile
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from .gtfs import haversine_m, hms_a_s
 
@@ -42,6 +43,7 @@ def validar_zip(ruta_zip: str) -> Reporte:
         trips = _leer(z, "trips.txt")
         stop_times = _leer(z, "stop_times.txt")
         calendar = _leer(z, "calendar.txt")
+        calendar_dates = _leer(z, "calendar_dates.txt")
         frequencies = _leer(z, "frequencies.txt")
 
     ids_stop = {s["stop_id"] for s in stops}
@@ -66,6 +68,23 @@ def validar_zip(ruta_zip: str) -> Reporte:
 
     ids_route = {x["route_id"] for x in routes}
     ids_serv = {c["service_id"] for c in calendar}
+    vistas: set[tuple[str, str]] = set()
+    for cd in calendar_dates:
+        if cd["service_id"] not in ids_serv:
+            r.errores.append(f"calendar_dates referencia servicio inexistente {cd['service_id']}")
+        if cd["exception_type"] not in {"1", "2"}:
+            r.errores.append(f"calendar_dates con exception_type inválido {cd['exception_type']} el {cd['date']}")
+        try:
+            datetime.strptime(cd["date"], "%Y%m%d")
+        except ValueError:
+            r.errores.append(f"calendar_dates con fecha inválida {cd['date']}")
+        clave = (cd["service_id"], cd["date"])
+        if clave in vistas:
+            r.errores.append(f"calendar_dates repite {cd['service_id']} el {cd['date']}")
+        vistas.add(clave)
+    if not calendar_dates:
+        r.avisos.append("Sin calendar_dates.txt: en feriados se usará el horario de un día normal.")
+
     ids_trip = set()
     for t in trips:
         ids_trip.add(t["trip_id"])
@@ -98,6 +117,10 @@ def validar_zip(ruta_zip: str) -> Reporte:
             r.errores.append(f"frequencies referencia viaje inexistente {f['trip_id']}")
         if int(f["headway_secs"]) <= 0:
             r.errores.append(f"headway inválido en {f['trip_id']}")
-    if not frequencies:
-        r.avisos.append("Sin frequencies.txt: OTP solo verá un viaje por patrón")
+    if frequencies:
+        r.avisos.append("El feed usa frequencies.txt: OpenTripPlanner 2.7 falla al planificar con viajes "
+                        "por frecuencia (corregido en 2.8). Preferir viajes explícitos.")
+    rutas_con_viajes = {t["route_id"] for t in trips}
+    for ruta in sorted(ids_route - rutas_con_viajes):
+        r.errores.append(f"La ruta {ruta} no tiene viajes")
     return r

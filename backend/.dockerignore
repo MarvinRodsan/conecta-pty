@@ -1,0 +1,5 @@
+# Lo que no hace falta para compilar dentro de Docker (más rápido y sin restos locales)
+build/
+.gradle/
+.idea/
+*.iml

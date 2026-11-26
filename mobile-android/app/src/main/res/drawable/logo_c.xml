@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La "C" del logo, en vector, para usarla chica dentro de la app (encabezado). Degradado turquesa a azul. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="48dp" android:height="48dp"
+    android:viewportWidth="48" android:viewportHeight="48">
+    <path android:strokeWidth="8" android:strokeLineCap="round"
+        android:pathData="M34.6,13.4A15,15 0,1 0,34.6 34.6">
+        <aapt:attr name="android:strokeColor">
+            <gradient android:type="linear"
+                android:startX="34" android:startY="8" android:endX="14" android:endY="42"
+                android:startColor="#FF6FF0F5" android:centerColor="#FF19B8E6" android:endColor="#FF1C6FE0" />
+        </aapt:attr>
+    </path>
+</vector>

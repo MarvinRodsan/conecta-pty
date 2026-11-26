@@ -14,7 +14,13 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+# Servidores públicos de Overpass. Si uno falla (caído, certificado vencido...), se prueba el siguiente.
+SERVIDORES_OVERPASS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+]
 ROLES_PARADA = {"stop", "stop_entry_only", "stop_exit_only"}
 
 
@@ -30,10 +36,52 @@ class Parada:
 class Patron:
     """Un sentido de una línea: secuencia ordenada de paradas."""
     osm_id: int
-    ref: str
-    nombre: str
+    ref: str            # número público de la línea: "1", "2"
+    nombre: str         # nombre de la relación en OSM
     color: str | None
     paradas: list[Parada] = field(default_factory=list)
+    ruta_id: str = ""   # GTFS route_id: "L1", "L2", "L2R" (ramal)
+    nombre_ruta: str = ""
+
+
+_PREFIJO_LINEA = re.compile(r"(?i)^\s*(l[ií]nea|l)\s*")
+_LINEA_EN_NOMBRE = re.compile(r"(?i)\bl(?:[ií]nea)?\s*(\d+)\b")
+
+
+def normalizar_ref(ref: str | None, nombre: str = "") -> str:
+    """'L1' / 'Línea 1' / '1' -> '1'. Si no hay ref, intenta leerla del nombre."""
+    r = _PREFIJO_LINEA.sub("", (ref or "").strip())
+    if r:
+        return r
+    m = _LINEA_EN_NOMBRE.search(nombre)
+    return m.group(1) if m else ""
+
+
+def asignar_rutas(patrones: list["Patron"], avisos: list[str]) -> None:
+    """Pone ruta_id y nombre a cada patrón.
+
+    Un patrón sin número de línea que comparte estación con una línea conocida se trata
+    como ramal de esa línea (caso Corredor Sur -> Aeropuerto de la Línea 2).
+    """
+    estaciones_por_ref: dict[str, set[str]] = {}
+    for p in patrones:
+        if p.ref:
+            estaciones_por_ref.setdefault(p.ref, set()).update(clave_estacion(x.nombre) for x in p.paradas)
+    colores = {p.ref: p.color for p in patrones if p.ref and p.color}
+    for p in patrones:
+        if p.ref:
+            p.ruta_id, p.nombre_ruta = f"L{p.ref}", f"Línea {p.ref}"
+            continue
+        mias = {clave_estacion(x.nombre) for x in p.paradas}
+        madre = next((r for r, est in sorted(estaciones_por_ref.items()) if mias & est), None)
+        if madre:
+            p.ref, p.ruta_id = madre, f"L{madre}R"
+            p.nombre_ruta = f"Línea {madre} – Ramal"
+            p.color = p.color or colores.get(madre)
+            avisos.append(f"Relación {p.osm_id} ({p.nombre}) sin número de línea: tratada como ramal de la Línea {madre}.")
+        else:
+            p.ref, p.ruta_id, p.nombre_ruta = "?", f"R{p.osm_id}", p.nombre
+            avisos.append(f"Relación {p.osm_id} ({p.nombre}) sin número de línea y sin conexión conocida. Revísala en OSM.")
 
 
 def consulta_overpass(bbox: list[float]) -> str:
@@ -47,16 +95,43 @@ def consulta_overpass(bbox: list[float]) -> str:
     )
 
 
-def descargar(bbox: list[float], destino: str, timeout: int = 120) -> None:
+def _contexto_ssl():
+    """Usa los certificados del sistema operativo si `truststore` está instalado
+    (útil en Windows y en redes con proxy corporativo). Nunca desactiva la verificación."""
+    try:
+        import ssl
+        import truststore  # pip install truststore
+        return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    except ImportError:
+        return None
+
+
+def descargar(bbox: list[float], destino: str, timeout: int = 120,
+              servidores: list[str] | None = None) -> str:
+    """Descarga las líneas y devuelve el servidor que respondió."""
     datos = urllib.parse.urlencode({"data": consulta_overpass(bbox)}).encode()
-    req = urllib.request.Request(
-        OVERPASS_URL, data=datos, headers={"User-Agent": "ConectaPTY-data/0.1"}
+    ctx = _contexto_ssl()
+    fallos: list[str] = []
+    for url in servidores or SERVIDORES_OVERPASS:
+        print(f"  Probando {url} ...")
+        req = urllib.request.Request(url, data=datos, headers={"User-Agent": "ConectaPTY-data/0.1"})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
+                contenido = resp.read()
+            json.loads(contenido)  # falla si el servidor devolvió un error en HTML
+        except Exception as e:  # noqa: BLE001 — se reporta y se prueba el siguiente
+            motivo = getattr(e, "reason", e)
+            print(f"    falló: {motivo}")
+            fallos.append(f"{url}: {motivo}")
+            continue
+        with open(destino, "wb") as f:
+            f.write(contenido)
+        return url
+    raise ConnectionError(
+        "Ningún servidor de Overpass respondió.\n  " + "\n  ".join(fallos) +
+        "\nSi todos dicen 'certificate has expired': revisa la fecha y hora de tu PC, "
+        "o prueba `pip install truststore` y vuelve a correr el comando."
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        contenido = resp.read()
-    json.loads(contenido)  # falla aquí si Overpass devolvió un error en HTML
-    with open(destino, "wb") as f:
-        f.write(contenido)
 
 
 def leer_patrones(overpass_json: dict) -> tuple[list[Patron], list[str]]:
@@ -72,11 +147,11 @@ def leer_patrones(overpass_json: dict) -> tuple[list[Patron], list[str]]:
         if rel.get("type") != "relation":
             continue
         tags = rel.get("tags", {})
-        ref = (tags.get("ref") or "").strip() or "?"
+        nombre_rel = tags.get("name", f"Relación {rel['id']}")
         patron = Patron(
             osm_id=rel["id"],
-            ref=ref,
-            nombre=tags.get("name", f"Línea {ref}"),
+            ref=normalizar_ref(tags.get("ref"), nombre_rel),
+            nombre=nombre_rel,
             color=_color(tags.get("colour")),
         )
         miembros = [m for m in rel.get("members", []) if m.get("type") == "node"]
@@ -104,8 +179,21 @@ def leer_patrones(overpass_json: dict) -> tuple[list[Patron], list[str]]:
             avisos.append(f"Relación {rel['id']} ({patron.nombre}) tiene menos de 2 paradas; descartada.")
             continue
         patrones.append(patron)
-    patrones.sort(key=lambda p: (p.ref, p.osm_id))
+    asignar_rutas(patrones, avisos)
+    patrones.sort(key=lambda p: (p.ruta_id, p.osm_id))
     return patrones, avisos
+
+
+def estaciones_de_transbordo(patrones: list[Patron]) -> dict[str, set[str]]:
+    """{nombre de estación: {rutas que la usan}} solo para las que tienen 2 rutas o más."""
+    rutas: dict[str, set[str]] = {}
+    nombres: dict[str, str] = {}
+    for p in patrones:
+        for x in p.paradas:
+            k = clave_estacion(x.nombre)
+            rutas.setdefault(k, set()).add(p.nombre_ruta)
+            nombres.setdefault(k, x.nombre)
+    return {nombres[k]: r for k, r in sorted(rutas.items()) if len(r) > 1}
 
 
 _RUIDO = re.compile(r"\b(estacion|metro|linea\s*\d+[a-z]?|l\d+[a-z]?)\b")

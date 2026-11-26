@@ -1,0 +1,97 @@
+# Producción de Conecta PTY (VPS Linux de 4 GB). Guía completa: README.md de esta carpeta.
+#   docker compose run --rm otp-construir     -> arma el grafo de rutas (primera vez y al cambiar datos)
+#   docker compose up -d --build              -> base de datos, motor de rutas, backend y Caddy
+#   docker compose logs -f backend            -> ver qué pasa
+#
+# Solo Caddy publica un puerto (443). OJO: Docker se salta el firewall (ufw) en los puertos
+# publicados, por eso db, otp y backend NO tienen "ports": solo se ven dentro de la red interna.
+name: conecta-pty-prod
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: conecta
+      # Dueño del esquema: solo lo usan las migraciones (Flyway) y los respaldos
+      POSTGRES_USER: conecta_admin
+      POSTGRES_PASSWORD: ${DB_ADMIN_PASSWORD:?falta DB_ADMIN_PASSWORD en .env}
+      # Usuario de la app, con permisos mínimos (lo crea db-init/20-usuarios.sh)
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD:?falta DB_APP_PASSWORD en .env}
+    mem_limit: 512m
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Archivo suelto, no la carpeta: montar la carpeta ocultaría el script de PostGIS de la imagen
+      - ./db-init/20-usuarios.sh:/docker-entrypoint-initdb.d/20-usuarios.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U conecta_admin -d conecta"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+
+  # Armar el grafo necesita ~2.5 GB: en un VPS de 4 GB, hacerlo con el resto apagado
+  #   docker compose stop otp backend && docker compose run --rm otp-construir && docker compose up -d
+  otp-construir:
+    profiles: ["construir"]
+    image: opentripplanner/opentripplanner:2.7.0
+    command: ["--build", "--save"]
+    environment:
+      JAVA_TOOL_OPTIONS: "-Xmx2500m"
+    mem_limit: 3g
+    volumes:
+      - ../otp/datos:/var/opentripplanner
+
+  otp:
+    image: opentripplanner/opentripplanner:2.7.0
+    restart: unless-stopped
+    command: ["--load", "--serve"]
+    environment:
+      JAVA_TOOL_OPTIONS: "-Xmx1500m"
+    mem_limit: 2g
+    volumes:
+      - ../otp/datos:/var/opentripplanner:ro
+
+  backend:
+    build: ../../backend
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:postgresql://db:5432/conecta
+      DB_USER: conecta_app
+      DB_PASSWORD: ${DB_APP_PASSWORD}
+      FLYWAY_USER: conecta_admin
+      FLYWAY_PASSWORD: ${DB_ADMIN_PASSWORD}
+      OTP_URL: http://otp:8080
+      GTFS_PATH: /datos/metro-pty-gtfs.zip
+      GEOCODER_HABILITADO: ${GEOCODER_HABILITADO:-true}
+    mem_limit: 512m
+    volumes:
+      - ../otp/datos:/datos:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      otp:
+        condition: service_started
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    environment:
+      DOMINIO: ${DOMINIO:?falta DOMINIO en .env}
+      CORREO_ACME: ${CORREO_ACME:?falta CORREO_ACME en .env}
+    ports:
+      # Solo HTTPS. El certificado se pide con el reto TLS-ALPN, que también usa el 443.
+      - "443:443/tcp"
+      - "443:443/udp"   # HTTP/3
+    mem_limit: 128m
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_datos:/data       # certificados: no borrar o Let's Encrypt limitará nuevas emisiones
+      - caddy_config:/config
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  caddy_datos:
+  caddy_config:

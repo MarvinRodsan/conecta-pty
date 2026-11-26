@@ -2,36 +2,28 @@ package pa.conectapty.app.ui.tema
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
 
-private val Claro = lightColorScheme(
-    primary = Color(0xFF0B5C7A),
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFC6E7F3),
-    onPrimaryContainer = Color(0xFF002B3A),
-    secondary = Color(0xFF2E7D5B),
-    tertiaryContainer = Color(0xFFFFE6B3),   // avisos de datos estimados
-    onTertiaryContainer = Color(0xFF3D2B00),
-    background = Color(0xFFF7F9FB),
-    surface = Color(0xFFF7F9FB),
-)
-
-private val Oscuro = darkColorScheme(
-    primary = Color(0xFF7FD3E8),
-    onPrimary = Color(0xFF003545),
-    primaryContainer = Color(0xFF004C63),
-    onPrimaryContainer = Color(0xFFC6E7F3),
-    secondary = Color(0xFF8ED6B0),
-    tertiaryContainer = Color(0xFF5A4300),
-    onTertiaryContainer = Color(0xFFFFE6B3),
-)
-
+/** Tema de Conecta PTY: colores, tipografía y formas de la marca (ver Colores, Tipografia, Medidas). */
 @Composable
-fun ConectaTema(contenido: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = if (isSystemInDarkTheme()) Oscuro else Claro, content = contenido)
+fun ConectaTema(oscuro: Boolean = isSystemInDarkTheme(), contenido: @Composable () -> Unit) {
+    CompositionLocalProvider(LocalColoresExtra provides if (oscuro) ExtraOscuro else ExtraClaro) {
+        MaterialTheme(
+            colorScheme = if (oscuro) EsquemaOscuro else EsquemaClaro,
+            typography = TipografiaConecta,
+            shapes = FormasConecta,
+            content = contenido,
+        )
+    }
+}
+
+/** Acceso a los colores propios: `ConectaTema.extra.exito`. */
+object ConectaTema {
+    val extra: ColoresExtra
+        @Composable @ReadOnlyComposable get() = LocalColoresExtra.current
 }
 
 /** Color oficial de la línea si viene del GTFS; si no, el primario. */

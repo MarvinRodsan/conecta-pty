@@ -1,0 +1,28 @@
+# Dependabot: abre un PR cuando sale una versión nueva de una librería, y avisa de las que
+# tienen vulnerabilidades conocidas. Las actualizaciones menores se agrupan en un solo PR por
+# carpeta para no llenar la bandeja. Revisar que CI pase antes de aceptar.
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: /backend
+    schedule: { interval: weekly, day: monday }
+    groups:
+      menores: { update-types: [minor, patch] }
+
+  - package-ecosystem: gradle
+    directory: /mobile-android
+    schedule: { interval: weekly, day: monday }
+    groups:
+      menores: { update-types: [minor, patch] }
+
+  - package-ecosystem: docker
+    directory: /backend
+    schedule: { interval: weekly, day: monday }
+
+  - package-ecosystem: docker-compose
+    directories: [/infrastructure, /infrastructure/produccion]
+    schedule: { interval: weekly, day: monday }
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly, day: monday }

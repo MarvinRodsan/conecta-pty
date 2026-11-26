@@ -1,0 +1,31 @@
+# Caddy: HTTPS con certificado automático de Let's Encrypt y proxy hacia el backend.
+# DOMINIO y CORREO_ACME vienen del .env (ver docker-compose.yml).
+{
+	email {$CORREO_ACME}
+	# Sin puerto 80 abierto: no intentar el reto HTTP ni redirigir desde HTTP
+	auto_https disable_redirects
+}
+
+{$DOMINIO} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	# Solo lo que la app necesita. /docs y el resto de /actuator quedan fuera.
+	@publico path /api/v1/* /actuator/health
+	handle @publico {
+		reverse_proxy backend:8080
+	}
+
+	handle {
+		respond 404
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

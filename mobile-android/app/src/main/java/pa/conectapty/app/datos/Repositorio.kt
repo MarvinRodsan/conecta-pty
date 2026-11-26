@@ -7,13 +7,34 @@ import pa.conectapty.app.datos.local.BaseDatos
 import pa.conectapty.app.datos.local.FavoritoEntidad
 import pa.conectapty.app.datos.local.ParadaEntidad
 import pa.conectapty.app.datos.remoto.ConectaApi
+import pa.conectapty.app.datos.remoto.DatosDto
+import pa.conectapty.app.datos.remoto.NuevoReporteDto
 import pa.conectapty.app.datos.remoto.PlanDto
 
 /** Estación tal como la usa la interfaz. */
 data class Estacion(val id: String, val nombre: String, val lat: Double, val lon: Double) {
     /** Precalculado una vez: buscar no vuelve a normalizar textos en cada tecla. */
     val claveBusqueda: String = normalizar(nombre)
+
+    fun comoPunto() = Punto(nombre, lat, lon, TipoPunto.ESTACION, estacionId = id)
 }
+
+enum class TipoPunto { ESTACION, LUGAR, UBICACION }
+
+/**
+ * Origen o destino de un viaje: una estación, un lugar ("UTP") o la ubicación del teléfono.
+ * El backend solo necesita lat/lon; OTP agrega la caminata hasta la estación.
+ *
+ * @param detalle texto secundario: "Bella Vista, Panamá" o "Cerca de Vía Argentina (≈ 300 m)"
+ */
+data class Punto(
+    val nombre: String,
+    val lat: Double,
+    val lon: Double,
+    val tipo: TipoPunto,
+    val detalle: String? = null,
+    val estacionId: String? = null,
+)
 
 class Repositorio(
     private val api: ConectaApi,
@@ -42,9 +63,23 @@ class Repositorio(
         })
     }
 
-    suspend fun planificar(origen: Estacion, destino: Estacion): Result<PlanDto> = resultado {
-        api.plan(origen.lat, origen.lon, destino.lat, destino.lon)
+    /** @param salida hora local de Panamá "2026-10-26T08:00"; null = ahora */
+    suspend fun planificar(origen: Punto, destino: Punto, salida: String?): Result<PlanDto> = resultado {
+        api.plan(origen.lat, origen.lon, destino.lat, destino.lon, salida)
     }
+
+    /** Direcciones y lugares (Photon vía backend). El backend exige al menos 3 letras. */
+    suspend fun buscarLugares(consulta: String): Result<List<Punto>> = resultado {
+        api.lugares(consulta.trim()).map {
+            Punto(it.nombre, it.lat, it.lon, TipoPunto.LUGAR, detalle = it.detalle)
+        }
+    }
+
+    /** Fecha y fuente de los datos que sirve el backend; null si aún no hay datos importados. */
+    suspend fun datosActualizados(): Result<DatosDto?> = resultado { api.salud().datos }
+
+    /** @return el mensaje de agradecimiento del servidor */
+    suspend fun reportar(reporte: NuevoReporteDto): Result<String> = resultado { api.reportar(reporte).mensaje }
 
     suspend fun alternarFavorito(e: Estacion, esFavorito: Boolean) {
         if (esFavorito) bd.favoritos().borrar(e.id)

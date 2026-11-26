@@ -1,0 +1,6 @@
+# Los scripts de Linux necesitan saltos de línea LF: con CRLF (Windows) fallan en el servidor
+*.sh      text eol=lf
+gradlew   text eol=lf
+Caddyfile text eol=lf
+*.bat     text eol=crlf
+*.ps1     text eol=crlf

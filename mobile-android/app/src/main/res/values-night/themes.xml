@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Modo oscuro: sin destello blanco al abrir la app -->
+    <style name="Theme.ConectaPTY" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/fondo</item>
+    </style>
+    <color name="fondo">#FF0B1626</color>
+</resources>

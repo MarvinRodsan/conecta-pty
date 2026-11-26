@@ -12,10 +12,21 @@ okhttp = "4.12.0"
 serialization = "1.9.0"
 coroutines = "1.10.2"
 profileinstaller = "1.4.1"
+splashscreen = "1.2.0"
+maplibre = "13.7.1"
+sentry = "8.62.0"
+baselineprofile = "1.4.1"
+benchmarkMacro = "1.4.1"
+uiautomator = "2.3.0"
 junit = "4.13.2"
+androidxTestRunner = "1.7.0"
+androidxTestExtJunit = "1.3.0"
+# Espresso >= 3.7: las versiones que trae compose-ui-test usan InputManager.getInstance, que no existe en Android 16+
+espresso = "3.7.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
+androidx-core-splashscreen = { module = "androidx.core:core-splashscreen", version.ref = "splashscreen" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
 androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
 androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
@@ -23,6 +34,8 @@ compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeB
 compose-ui = { module = "androidx.compose.ui:ui" }
 compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
+compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
+compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
 compose-material3 = { module = "androidx.compose.material3:material3" }
 compose-material-icons-core = { module = "androidx.compose.material:material-icons-core" }
 room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
@@ -35,11 +48,24 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 androidx-profileinstaller = { module = "androidx.profileinstaller:profileinstaller", version.ref = "profileinstaller" }
+# Mapa vectorial libre (sin API key). Solo se carga en la pantalla de detalle.
+# Variante OpenGL ES: desde la 13, "android-sdk" usa Vulkan y la app se cierra en teléfonos
+# (y emuladores) sin un driver Vulkan que funcione. OpenGL ES funciona en todos.
+maplibre-android = { module = "org.maplibre.gl:android-sdk-opengl", version.ref = "maplibre" }
+# Reporte de fallos. Solo se activa si hay SENTRY_DSN (ver README de mobile-android).
+sentry-android-core = { module = "io.sentry:sentry-android-core", version.ref = "sentry" }
 junit = { module = "junit:junit", version.ref = "junit" }
+androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTestRunner" }
+androidx-test-ext-junit = { module = "androidx.test.ext:junit", version.ref = "androidxTestExtJunit" }
+androidx-test-espresso = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso" }
+androidx-benchmark-macro-junit4 = { module = "androidx.benchmark:benchmark-macro-junit4", version.ref = "benchmarkMacro" }
+androidx-uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "uiautomator" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
+android-test = { id = "com.android.test", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+baselineprofile = { id = "androidx.baselineprofile", version.ref = "baselineprofile" }

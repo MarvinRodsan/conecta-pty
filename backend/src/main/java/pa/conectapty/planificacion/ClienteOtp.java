@@ -7,7 +7,11 @@ import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 import pa.conectapty.comun.ConectaProperties;
 import pa.conectapty.comun.ServicioNoDisponibleException;
 
@@ -18,15 +22,19 @@ import pa.conectapty.comun.ServicioNoDisponibleException;
 @Component
 public class ClienteOtp {
 
+    private static final Logger log = LoggerFactory.getLogger(ClienteOtp.class);
+
     static final String CONSULTA = """
-            query Plan($desdeLat: Float!, $desdeLon: Float!, $hastaLat: Float!, $hastaLon: Float!, $n: Int!) {
+            query Plan($desdeLat: Float!, $desdeLon: Float!, $hastaLat: Float!, $hastaLon: Float!, $n: Int!,
+                       $fecha: String!, $hora: String!) {
               plan(from: {lat: $desdeLat, lon: $desdeLon}, to: {lat: $hastaLat, lon: $hastaLon},
+                   date: $fecha, time: $hora,
                    numItineraries: $n, transportModes: [{mode: WALK}, {mode: TRANSIT}]) {
                 itineraries {
                   duration
                   walkDistance
                   legs {
-                    mode duration distance headsign
+                    mode duration distance headsign startTime endTime
                     from { name }
                     to { name }
                     route { shortName longName color }
@@ -44,17 +52,29 @@ public class ClienteOtp {
     public ClienteOtp(RestClient.Builder builder, ConectaProperties props) {
         this.urlOtp = props.otp().url();
         Duration timeout = Duration.ofMillis(props.otp().timeoutMs());
+        // HTTP/1.1 explícito: por defecto Java intenta negociar HTTP/2 ("h2c") y el servidor
+        // de OTP (Grizzly) no siempre lo acepta en peticiones POST.
         JdkClientHttpRequestFactory fabrica = new JdkClientHttpRequestFactory(
-                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build());
+                HttpClient.newBuilder()
+                        .version(HttpClient.Version.HTTP_1_1)
+                        .connectTimeout(Duration.ofSeconds(3))
+                        .build());
         fabrica.setReadTimeout(timeout);
         this.http = builder.baseUrl(props.otp().url()).requestFactory(fabrica).build();
     }
 
-    public OtpRespuesta planificar(double desdeLat, double desdeLon, double hastaLat, double hastaLon, int opciones) {
-        Map<String, Object> cuerpo = Map.of(
-                "query", CONSULTA,
-                "variables", Map.of("desdeLat", desdeLat, "desdeLon", desdeLon,
-                        "hastaLat", hastaLat, "hastaLon", hastaLon, "n", opciones));
+    /** @param salida fecha y hora local de Panamá desde la que se busca */
+    public OtpRespuesta planificar(double desdeLat, double desdeLon, double hastaLat, double hastaLon,
+                                   java.time.LocalDateTime salida, int opciones) {
+        Map<String, Object> variables = new java.util.HashMap<>();
+        variables.put("desdeLat", desdeLat);
+        variables.put("desdeLon", desdeLon);
+        variables.put("hastaLat", hastaLat);
+        variables.put("hastaLon", hastaLon);
+        variables.put("n", opciones);
+        variables.put("fecha", salida.toLocalDate().toString());                 // 2026-10-26
+        variables.put("hora", salida.toLocalTime().withSecond(0).withNano(0).toString()); // 08:00
+        Map<String, Object> cuerpo = Map.of("query", CONSULTA, "variables", variables);
         try {
             OtpRespuesta r = http.post().uri("/otp/gtfs/v1")
                     .contentType(MediaType.APPLICATION_JSON)
@@ -65,12 +85,20 @@ public class ClienteOtp {
                 throw new ServicioNoDisponibleException("El motor de rutas respondió vacío.", null);
             }
             if (r.errors() != null && !r.errors().isEmpty()) {
-                throw new ServicioNoDisponibleException("Error del motor de rutas: " + r.errors().get(0).message(), null);
+                log.warn("OTP respondió con error GraphQL: {}", r.errors());
+                throw new ServicioNoDisponibleException("El motor de rutas no pudo calcular la ruta.", null);
             }
             return r;
-        } catch (RestClientException e) {
+        } catch (RestClientResponseException e) {
+            log.warn("OTP respondió HTTP {}: {}", e.getStatusCode().value(), e.getResponseBodyAsString());
+            throw new ServicioNoDisponibleException("El motor de rutas respondió con un error.", e);
+        } catch (ResourceAccessException e) {
+            log.warn("No se pudo conectar con OTP en {}: {}", urlOtp, e.getMessage());
             throw new ServicioNoDisponibleException(
-                    "No se pudo contactar el motor de rutas (OpenTripPlanner). ¿Está corriendo en " + urlOtp + "?", e);
+                    "No se pudo contactar el motor de rutas. Inténtalo de nuevo en unos segundos.", e);
+        } catch (RestClientException e) {
+            log.warn("Respuesta inesperada de OTP", e);
+            throw new ServicioNoDisponibleException("Respuesta inesperada del motor de rutas.", e);
         }
     }
 }

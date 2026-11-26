@@ -1,0 +1,12 @@
+{
+  "_comentario": "Accesibilidad verificada en campo. Mientras una estación no esté aquí (con fecha y fuente), la app muestra 'desconocido': nunca prometemos un ascensor que no comprobamos. La clave es la de clave_estacion() en osm.py (ej. 'san-miguelito', 'via-argentina').",
+  "_formato": {
+    "san-miguelito": {
+      "silla_ruedas": "si | no",
+      "detalle": "Ascensor en el acceso norte, funcionando",
+      "verificado_el": "2026-11-05",
+      "fuente": "Visita en campo (nombre de quien verificó) / respuesta del Metro de Panamá"
+    }
+  },
+  "estaciones": {}
+}

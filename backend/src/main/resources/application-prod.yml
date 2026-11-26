@@ -1,0 +1,28 @@
+# Perfil de producción: activar con  SPRING_PROFILES_ACTIVE=prod
+# Todo lo sensible viene de variables de entorno, sin valores por defecto:
+# si falta una, el backend NO arranca (mejor que arrancar inseguro).
+spring:
+  datasource:
+    url: ${DB_URL}
+    # Usuario de la app: solo SELECT/INSERT/UPDATE/DELETE (ver infrastructure/produccion/db-init)
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+  flyway:
+    # Las migraciones necesitan crear tablas: usan el dueño del esquema, no el usuario de la app
+    user: ${FLYWAY_USER}
+    password: ${FLYWAY_PASSWORD}
+
+server:
+  # Detrás de Caddy: usar la IP real del cliente que envía el proxy (solo Caddy llega al backend)
+  forward-headers-strategy: native
+  shutdown: graceful           # termina las peticiones en curso al reiniciar
+
+springdoc:
+  api-docs:
+    enabled: false             # sin mapa público de la API
+  swagger-ui:
+    enabled: false
+
+conecta:
+  otp:
+    url: ${OTP_URL}

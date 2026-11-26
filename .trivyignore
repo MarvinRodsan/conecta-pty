@@ -1,0 +1,3 @@
+# Vulnerabilidades revisadas que NO afectan a Conecta PTY, una por línea con fecha de vencimiento:
+#   CVE-AAAA-NNNNN exp:AAAA-MM-DD   # por qué no aplica
+# Al vencer, Trivy vuelve a fallar y obliga a revisarla otra vez. Hoy no hay ninguna.

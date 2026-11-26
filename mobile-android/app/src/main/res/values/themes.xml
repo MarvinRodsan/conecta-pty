@@ -4,6 +4,14 @@
     <style name="Theme.ConectaPTY" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/fondo</item>
     </style>
-    <color name="fondo">#FFF7F9FB</color>
-    <color name="marca">#FF0B5C7A</color>
+
+    <!-- Pantalla de inicio (core-splashscreen): fondo de marca con el ícono, luego el tema normal -->
+    <style name="Theme.ConectaPTY.Inicio" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/marca</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.ConectaPTY</item>
+    </style>
+
+    <color name="fondo">#FFF4F8FC</color>
+    <color name="marca">#FF092D5C</color>
 </resources>

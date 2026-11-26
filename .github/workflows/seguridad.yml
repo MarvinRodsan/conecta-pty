@@ -1,0 +1,68 @@
+name: Seguridad
+
+# Cada push a main, cada PR y cada lunes (salen vulnerabilidades nuevas aunque el código no cambie)
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 12 * * 1"
+
+permissions:
+  contents: read
+
+# Trivy se usa con su imagen Docker en una versión fija, no con aquasecurity/trivy-action:
+# en marzo de 2026 las etiquetas de esa Action se reescribieron con código malicioso
+# (CVE-2026-33634) y la 0.69.4 del binario también. 0.69.3 es una versión segura.
+# Al actualizar, revisar el aviso GHSA-69fq-xp46-6x23 antes de cambiar el número.
+env:
+  TRIVY: aquasec/trivy:0.69.3
+
+jobs:
+  imagen-backend:
+    name: Trivy - imagen del backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t conecta-backend:ci backend
+      # Revisa el sistema base de la imagen y todas las librerías del .jar.
+      # Falla con vulnerabilidades altas o críticas que ya tienen arreglo.
+      # .trivyignore: las revisadas que no aplican, cada una con fecha de vencimiento.
+      - run: >
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD":/repo $TRIVY
+          image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1
+          --ignorefile /repo/.trivyignore
+          conecta-backend:ci
+
+  repositorio:
+    name: Trivy - secretos y configuración
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Contraseñas o llaves subidas por error, y fallos de configuración en Dockerfile y compose
+      - run: >
+          docker run --rm -v "$PWD":/repo $TRIVY
+          fs --scanners secret,misconfig --severity HIGH,CRITICAL --exit-code 1
+          --skip-dirs "**/build" --skip-dirs "**/.gradle"
+          /repo
+
+  # Envía a GitHub el árbol completo de dependencias de Gradle (incluidas las indirectas).
+  # Sin esto, las alertas de Dependabot no ven las librerías de los proyectos Gradle.
+  dependencias-gradle:
+    name: Dependencias Gradle -> alertas de Dependabot
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        include:
+          - { carpeta: backend, java: "21" }
+          - { carpeta: mobile-android, java: "17" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "${{ matrix.java }}" }
+      - uses: gradle/actions/dependency-submission@v4
+        with:
+          build-root-directory: ${{ matrix.carpeta }}

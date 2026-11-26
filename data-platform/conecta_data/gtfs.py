@@ -14,7 +14,22 @@ import zipfile
 from collections import defaultdict
 from datetime import date, timedelta
 
+from .feriados import calendar_dates, feriados_entre
 from .osm import Parada, Patron, clave_estacion
+
+# GTFS wheelchair_boarding: 0 = desconocido, 1 = accesible, 2 = no accesible
+_SILLA_RUEDAS = {"si": "1", "no": "2"}
+
+
+def accesibilidad_verificada(config: dict | None) -> dict[str, dict]:
+    """Solo cuenta lo verificado en campo: con valor si/no, fecha y fuente."""
+    if not config:
+        return {}
+    return {
+        clave: dato
+        for clave, dato in config.get("estaciones", {}).items()
+        if dato.get("silla_ruedas") in _SILLA_RUEDAS and dato.get("verificado_el") and dato.get("fuente")
+    }
 
 
 def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -35,10 +50,16 @@ def s_a_hms(seg: int) -> str:
 
 
 def construir_feed(
-    patrones: list[Patron], supuestos: dict, hoy: date | None = None
+    patrones: list[Patron], supuestos: dict, hoy: date | None = None,
+    feriados: dict | None = None, accesibilidad: dict | None = None,
 ) -> tuple[dict[str, list[dict]], dict]:
-    """Devuelve ({archivo: filas}, procedencia)."""
+    """Devuelve ({archivo: filas}, procedencia).
+
+    feriados:      contenido de config/feriados_panama.json (None = no se modelan)
+    accesibilidad: contenido de config/accesibilidad_estaciones.json (None = todo desconocido)
+    """
     hoy = hoy or date.today()
+    verificadas = accesibilidad_verificada(accesibilidad)
     fin = hoy + timedelta(days=int(supuestos.get("vigencia_dias", 365)))
     ag = supuestos["agencia"]
     archivos: dict[str, list[dict]] = {}
@@ -65,6 +86,8 @@ def construir_feed(
     stops: list[dict] = []
     for clave, hijos in sorted(por_estacion.items()):
         nombre = min((h.nombre for h in hijos), key=len)  # el más limpio suele ser el más corto
+        # 0 = desconocido salvo verificación en campo: no prometemos accesibilidad
+        silla = _SILLA_RUEDAS.get(verificadas.get(clave, {}).get("silla_ruedas"), "0")
         stops.append({
             "stop_id": f"EST_{clave}",
             "stop_name": nombre,
@@ -72,7 +95,7 @@ def construir_feed(
             "stop_lon": f"{sum(h.lon for h in hijos) / len(hijos):.6f}",
             "location_type": "1",
             "parent_station": "",
-            "wheelchair_boarding": "0",  # 0 = desconocido: no prometemos accesibilidad
+            "wheelchair_boarding": silla,
         })
         for h in sorted(hijos, key=lambda x: x.osm_id):
             stops.append({
@@ -82,7 +105,7 @@ def construir_feed(
                 "stop_lon": f"{h.lon:.6f}",
                 "location_type": "0",
                 "parent_station": f"EST_{clave}",
-                "wheelchair_boarding": "0",
+                "wheelchair_boarding": silla,
             })
     archivos["stops.txt"] = stops
 
@@ -102,12 +125,12 @@ def construir_feed(
     # --- Rutas (una por ref) y servicios
     rutas: dict[str, dict] = {}
     for p in patrones:
-        if p.ref not in rutas:
-            rutas[p.ref] = {
-                "route_id": f"L{p.ref}",
+        if p.ruta_id not in rutas:
+            rutas[p.ruta_id] = {
+                "route_id": p.ruta_id,
                 "agency_id": ag["agency_id"],
                 "route_short_name": p.ref,
-                "route_long_name": f"Línea {p.ref}",
+                "route_long_name": p.nombre_ruta,
                 "route_type": "1",  # metro
                 "route_color": p.color or "",
                 "route_text_color": "FFFFFF" if p.color else "",
@@ -121,39 +144,45 @@ def construir_feed(
          "start_date": hoy.strftime("%Y%m%d"), "end_date": fin.strftime("%Y%m%d")}
         for sid, s in servicios.items()
     ]
+    lista_feriados = feriados_entre(feriados, hoy, fin) if feriados else []
+    if lista_feriados:
+        archivos["calendar_dates.txt"] = calendar_dates(
+            lista_feriados, servicios, feriados.get("servicio_en_feriado", "DOM"))
 
-    # --- Viajes plantilla + frecuencias (no hay horarios oficiales por viaje)
+    # --- Viajes: uno por cada salida estimada (cada N minutos según el servicio).
+    # No usamos frequencies.txt: OpenTripPlanner 2.7 falla ("distanceMeters") con viajes por
+    # frecuencia (corregido en OTP 2.8, PR #6580) y además cobra siempre la espera completa
+    # del intervalo (issue #8080). Viajes explícitos funcionan bien en cualquier versión.
     vel_ms = float(supuestos["velocidad_comercial_kmh"]) / 3.6
     perm = int(supuestos["permanencia_en_estacion_s"])
-    trips, stop_times, frequencies = [], [], []
+    trips, stop_times = [], []
     for p in patrones:
+        # Desfase (llegada, salida) de cada parada respecto a la salida de la primera
+        desfases: list[tuple[int, int]] = []
+        t = 0
+        for i, par in enumerate(p.paradas):
+            if i > 0:
+                prev = p.paradas[i - 1]
+                t += max(60, round(haversine_m(prev.lat, prev.lon, par.lat, par.lon) / vel_ms))
+            salida = t + (perm if 0 < i < len(p.paradas) - 1 else 0)
+            desfases.append((t, salida))
+            t = salida
         for sid, s in servicios.items():
-            trip_id = f"{sid}_{p.osm_id}"
-            trips.append({
-                "route_id": f"L{p.ref}", "service_id": sid, "trip_id": trip_id,
-                "trip_headsign": p.paradas[-1].nombre, "direction_id": "",
-            })
-            t = hms_a_s(s["inicio"])
-            for i, par in enumerate(p.paradas):
-                if i > 0:
-                    prev = p.paradas[i - 1]
-                    t += max(60, round(haversine_m(prev.lat, prev.lon, par.lat, par.lon) / vel_ms))
-                llegada = t
-                salida = t + (perm if 0 < i < len(p.paradas) - 1 else 0)
-                stop_times.append({
-                    "trip_id": trip_id, "arrival_time": s_a_hms(llegada),
-                    "departure_time": s_a_hms(salida), "stop_id": f"N{par.osm_id}",
-                    "stop_sequence": str(i + 1), "timepoint": "0",  # 0 = aproximado
+            intervalo = int(supuestos["intervalo_min_por_servicio"][sid]) * 60
+            for inicio in range(hms_a_s(s["inicio"]), hms_a_s(s["fin"]) + 1, intervalo):
+                trip_id = f"{sid}_{p.osm_id}_{s_a_hms(inicio)[:5].replace(':', '')}"
+                trips.append({
+                    "route_id": p.ruta_id, "service_id": sid, "trip_id": trip_id,
+                    "trip_headsign": p.paradas[-1].nombre, "direction_id": "",
                 })
-                t = salida
-            frequencies.append({
-                "trip_id": trip_id, "start_time": s["inicio"], "end_time": s["fin"],
-                "headway_secs": str(int(supuestos["intervalo_min_por_servicio"][sid]) * 60),
-                "exact_times": "0",
-            })
+                for i, (par, (ll, sa)) in enumerate(zip(p.paradas, desfases)):
+                    stop_times.append({
+                        "trip_id": trip_id, "arrival_time": s_a_hms(inicio + ll),
+                        "departure_time": s_a_hms(inicio + sa), "stop_id": f"N{par.osm_id}",
+                        "stop_sequence": str(i + 1), "timepoint": "0",  # 0 = aproximado
+                    })
     archivos["trips.txt"] = trips
     archivos["stop_times.txt"] = stop_times
-    archivos["frequencies.txt"] = frequencies
 
     procedencia = {
         "generado": hoy.isoformat(),
@@ -165,9 +194,16 @@ def construir_feed(
         "tiempos_entre_estaciones": {"estado": supuestos.get("estado_tiempos_viaje", "estimado"),
                                      "metodo": f"distancia / {supuestos['velocidad_comercial_kmh']} km/h + {perm}s de parada"},
         "tarifas": {"estado": "desconocido", "nota": "No se publican tarifas hasta tener fuente oficial."},
-        "accesibilidad": {"estado": "desconocido"},
-        "feriados": {"estado": "no_modelado", "nota": "calendar_dates.txt pendiente."},
-        "patrones": [{"osm_relation": p.osm_id, "ref": p.ref, "nombre": p.nombre,
+        "accesibilidad": (
+            {"estado": "verificado_parcial", "estaciones_verificadas": sorted(verificadas),
+             "nota": "Las demás estaciones siguen como desconocido."}
+            if verificadas else {"estado": "desconocido"}),
+        "feriados": (
+            {"estado": feriados.get("estado", "por_confirmar"), "fuente": feriados.get("fuente", ""),
+             "servicio": feriados.get("servicio_en_feriado", "DOM"),
+             "fechas": [{"fecha": f.fecha.isoformat(), "nombre": f.nombre} for f in lista_feriados]}
+            if lista_feriados else {"estado": "no_modelado", "nota": "Sin config/feriados_panama.json."}),
+        "patrones": [{"osm_relation": p.osm_id, "ref": p.ref, "ruta": p.ruta_id, "nombre": p.nombre,
                       "paradas": len(p.paradas)} for p in patrones],
     }
     return archivos, procedencia

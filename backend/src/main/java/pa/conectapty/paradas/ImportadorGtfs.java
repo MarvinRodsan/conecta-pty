@@ -20,6 +20,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -31,6 +32,7 @@ import pa.conectapty.comun.ConectaProperties;
  * Todo ocurre en una transacción: o se publica completo o no se publica.
  */
 @Component
+@Order(10) // antes que el calentador de OTP, que usa estas estaciones
 public class ImportadorGtfs implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(ImportadorGtfs.class);
@@ -61,19 +63,31 @@ public class ImportadorGtfs implements ApplicationRunner {
             return;
         }
         List<Map<String, String>> stops = leerCsv(zip, "stops.txt");
-        tx.executeWithoutResult(estado -> publicar(zip, sha, stops));
-        log.info("Importadas {} paradas desde {}", stops.size(), zip.getFileName());
+        String version = versionFeed(zip);
+        tx.executeWithoutResult(estado -> publicar(zip, sha, version, stops));
+        log.info("Importadas {} paradas desde {} (versión {})", stops.size(), zip.getFileName(), version);
     }
 
-    private void publicar(Path zip, String sha, List<Map<String, String>> stops) {
+    /** feed_info.feed_version (fecha de generación en data-platform), o null si no viene. */
+    static String versionFeed(Path zip) {
+        try {
+            List<Map<String, String>> info = leerCsv(zip, "feed_info.txt");
+            String v = info.isEmpty() ? null : info.get(0).get("feed_version");
+            return v == null || v.isBlank() ? null : v;
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    private void publicar(Path zip, String sha, String version, List<Map<String, String>> stops) {
         long fuenteId = jdbc.sql("SELECT id FROM fuente_datos WHERE nombre = 'OpenStreetMap'")
                 .query(Long.class).single();
         long importacionId = jdbc.sql("""
-                INSERT INTO importacion_datos (fuente_id, archivo, sha256, registros, estado)
-                VALUES (:f, :a, :s, :n, 'publicada') RETURNING id
+                INSERT INTO importacion_datos (fuente_id, archivo, sha256, registros, estado, version_feed)
+                VALUES (:f, :a, :s, :n, 'publicada', :v) RETURNING id
                 """)
                 .param("f", fuenteId).param("a", zip.getFileName().toString())
-                .param("s", sha).param("n", stops.size())
+                .param("s", sha).param("n", stops.size()).param("v", version)
                 .query(Long.class).single();
 
         // Versión anterior queda registrada en importacion_datos; las paradas se reemplazan completas.
