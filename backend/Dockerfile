@@ -1,9 +1,9 @@
-FROM eclipse-temurin:21-jdk AS build
+FROM eclipse-temurin:25-jdk AS build
 WORKDIR /app
 COPY . .
 RUN chmod +x gradlew && ./gradlew --no-daemon bootJar -x test
 
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:25-jre
 WORKDIR /app
 COPY --from=build /app/build/libs/*.jar app.jar
 # Sin root: si alguien explotara un fallo del backend, no controla el contenedor
